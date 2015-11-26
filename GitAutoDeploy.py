@@ -124,9 +124,36 @@ class WebhookRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
+        
+        # We only want auto deploy if it's on production branch
+        if self.get_ref_from_request() == 'refs/heads/production':
+            # Wait one second before we do git pull (why?)
+            Timer(1.0, GitAutoDeploy.process_repo_urls, [repo_urls]).start()
+        
+    def get_ref_from_request(self):
+        import json
 
-        # Wait one second before we do git pull (why?)
-        Timer(1.0, GitAutoDeploy.process_repo_urls, [repo_urls]).start()
+        content_type = self.headers.getheader('content-type')
+        length = int(self.headers.getheader('content-length'))
+        body = self.rfile.read(length)
+
+        data = json.loads(body)
+        
+        gitlab_event = self.headers.getheader('X-Gitlab-Event')
+        
+        ref = "refs/heads/master"
+        
+        if gitlab_event:
+
+            print "Received '%s' event from GitLab" % gitlab_event
+
+            if not 'ref' in data:
+                print "ERROR - Unable to recognize data format"
+                return ref
+                
+            return data['ref']
+            
+        return ref
 
     def get_repo_urls_from_request(self):
         """Parses the incoming request and extracts all possible URLs to the repository in question. Since repos can
