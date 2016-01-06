@@ -132,12 +132,6 @@ class WebhookRequestHandler(BaseHTTPRequestHandler):
         
     def get_ref_from_request(self):
         import json
-
-        content_type = self.headers.getheader('content-type')
-        length = int(self.headers.getheader('content-length'))
-        body = self.rfile.read(length)
-
-        data = json.loads(body)
         
         gitlab_event = self.headers.getheader('X-Gitlab-Event')
         
@@ -147,11 +141,11 @@ class WebhookRequestHandler(BaseHTTPRequestHandler):
 
             print "Received '%s' event from GitLab" % gitlab_event
 
-            if not 'ref' in data:
+            if not 'ref' in self.data:
                 print "ERROR - Unable to recognize data format"
                 return ref
                 
-            return data['ref']
+            return self.data['ref']
             
         return ref
 
@@ -165,7 +159,7 @@ class WebhookRequestHandler(BaseHTTPRequestHandler):
         length = int(self.headers.getheader('content-length'))
         body = self.rfile.read(length)
 
-        data = json.loads(body)
+        self.data = json.loads(body)
 
         repo_urls = []
 
@@ -178,81 +172,81 @@ class WebhookRequestHandler(BaseHTTPRequestHandler):
 
             print "Received '%s' event from GitLab" % gitlab_event
 
-            if not 'repository' in data:
+            if not 'repository' in self.data:
                 print "ERROR - Unable to recognize data format"
                 return repo_urls
 
             # One repository may posses multiple URLs for different protocols
             for k in ['url', 'git_http_url', 'git_ssh_url']:
-                if k in data['repository']:
-                    repo_urls.append(data['repository'][k])
+                if k in self.data['repository']:
+                    repo_urls.append(self.data['repository'][k])
 
         # Assume GitHub if the X-GitHub-Event HTTP header is set
         elif github_event:
 
             print "Received '%s' event from GitHub" % github_event
 
-            if not 'repository' in data:
+            if not 'repository' in self.data:
                 print "ERROR - Unable to recognize data format"
                 return repo_urls
 
             # One repository may posses multiple URLs for different protocols
             for k in ['url', 'git_url', 'clone_url', 'ssh_url']:
                 if k in data['repository']:
-                    repo_urls.append(data['repository'][k])
+                    repo_urls.append(self.data['repository'][k])
 
         # Assume BitBucket if the User-Agent HTTP header is set to 'Bitbucket-Webhooks/2.0' (or something similar)
         elif user_agent and user_agent.lower().find('bitbucket') != -1:
 
             print "Received event from BitBucket"
 
-            if not 'repository' in data:
+            if not 'repository' in self.data:
                 print "ERROR - Unable to recognize data format"
                 return repo_urls
 
             # One repository may posses multiple URLs for different protocols
             for k in ['url', 'git_url', 'clone_url', 'ssh_url']:
-                if k in data['repository']:
-                    repo_urls.append(data['repository'][k])
+                if k in self.data['repository']:
+                    repo_urls.append(self.data['repository'][k])
 
-            if 'full_name' in data['repository']:
+            if 'full_name' in self.data['repository']:
                 repo_urls.append('git@bitbucket.org:%s.git' % data['repository']['full_name'])
 
                 # Add a simplified version of the bitbucket HTTPS URL - without the username@bitbucket.com part. This is
                 # needed since the configured repositories might be configured using a different username.
-                repo_urls.append('https://bitbucket.org/%s.git' % (data['repository']['full_name']))
+                repo_urls.append('https://bitbucket.org/%s.git' % (self.data['repository']['full_name']))
 
         # If payload is missing, and GitLab wasn't identified through HTTP header, we assume older GitLab syntax.
-        elif content_type == "application/json" and 'payload' not in data and "build_status" not in data:
+        elif content_type == "application/json" and 'payload' not in self.data and "build_status" not in self.data:
 
             print "Received event from GitLab (old syntax)"
 
-            if not 'repository' in data:
+            if not 'repository' in self.data:
                 print "ERROR - Unable to recognize data format"
                 return repo_urls
 
             # One repository may posses multiple URLs for different protocols
             for k in ['url', 'git_http_url', 'git_ssh_url']:
-                if k in data['repository']:
-                    repo_urls.append(data['repository'][k])
+                if k in self.data['repository']:
+                    repo_urls.append(self.data['repository'][k])
 
         # Special Case for Gitlab CI
-        elif content_type == "application/json" and "build_status" in data:
+        elif content_type == "application/json" and "build_status" in self.data:
 
             print 'Received event from Gitlab CI'
 
-            if not 'push_data' in data:
+            if not 'push_data' in self.data:
                 print "ERROR - Unable to recognize data format"
                 return repo_urls
 
             # Only add repositories if the build is successful. Ignore it in other case.
-            if data['build_status'] == "success":
+            if self.data['build_status'] == "success":
                 for k in ['url', 'git_http_url', 'git_ssh_url']:
-                    if k in data['push_data']['repository']:
-                        repo_urls.append(data['push_data']['repository'][k])
+                    if k in self.data['push_data']['repository']:
+                        repo_urls.append(self.data['push_data']['repository'][k])
             else:
                 print "Gitlab CI build '%d' has status '%s'. Not pull will be done" % (
-                data['build_id'], data['build_status'])
+                self.data['build_id'], self.data['build_status'])
 
         else:
             print "ERROR - Unable to recognize request origin. Don't know how to handle the request. Outdated GitLab?"
