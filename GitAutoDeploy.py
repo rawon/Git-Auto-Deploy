@@ -125,8 +125,8 @@ class WebhookRequestHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
         
-        # We only want auto deploy if it's on production branch
-        if self.get_ref_from_request() == 'refs/heads/production':
+        # We only want auto deploy if it's on staging branch
+        if self.get_ref_from_request() == 'refs/heads/staging':
             # Wait one second before we do git pull (why?)
             Timer(1.0, GitAutoDeploy.process_repo_urls, [repo_urls]).start()
         
